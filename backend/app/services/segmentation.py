@@ -22,15 +22,19 @@ class CreatorSegmentation:
             4: "Emerging Talent"         # Nuevos con potencial
         }
         
-        # Inicializar Semantic Kernel para análisis avanzado
-        self.kernel = sk.Kernel()
-        self.kernel.add_text_completion_service(
-            "openai-chat",
-            OpenAIChatCompletion(
-                "gpt-4",
-                api_key="your-openai-key"  # Configurar desde variables de entorno
+        # Inicializar Semantic Kernel solo si hay API key
+        if settings.OPENAI_API_KEY:
+            self.kernel = sk.Kernel()
+            self.kernel.add_text_completion_service(
+                "openai-chat",
+                OpenAIChatCompletion(
+                    "gpt-4",
+                    api_key=settings.OPENAI_API_KEY  # FIX: Usar variable de entorno
+                )
             )
-        )
+        else:
+            self.kernel = None
+            logger.warning("OpenAI API key not configured, AI analysis will be disabled")
     
     def prepare_features(self, creators: List[Creator]) -> np.ndarray:
         """Prepara las características para clustering"""
@@ -79,6 +83,17 @@ class CreatorSegmentation:
         avg_followers = np.mean([c.followers_count for c in segment])
         avg_engagement = np.mean([c.engagement_rate for c in segment])
         avg_growth = np.mean([c.growth_rate for c in segment])
+
+        # Si no hay kernel configurado, devolver análisis básico
+        if not self.kernel:
+            return {
+                "segment_analysis": "AI analysis not available (OpenAI API key not configured)",
+                "metrics": {
+                    "avg_followers": avg_followers,
+                    "avg_engagement": avg_engagement,
+                    "avg_growth": avg_growth
+                }
+            }
         
         prompt = f"""
         Analiza este segmento de creadores de TikTok:

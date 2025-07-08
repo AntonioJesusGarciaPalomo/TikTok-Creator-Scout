@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Search, Filter, TrendingUp, Users, Activity, Calendar, Grid, List, Plus } from 'lucide-react';
+import { Search, Filter, TrendingUp, Users, Activity, Calendar, Grid, List, Plus, X } from 'lucide-react';
 import api from '../services/api';
 import CreatorCard from './CreatorCard';
 import FilterPanel from './FilterPanel';
