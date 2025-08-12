@@ -5,9 +5,10 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 from sqlalchemy.orm import Session
 from ..models.creator import Creator
+from ..config import settings
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-import settings
+
 import logging
 
 logger = logging.getLogger(__name__)
