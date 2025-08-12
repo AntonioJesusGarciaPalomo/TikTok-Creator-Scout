@@ -1,0 +1,15 @@
+# Base de datos
+DATABASE_URL=postgresql://user:password@localhost/tiktok_scout
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# RapidAPI (OBLIGATORIO)
+RAPIDAPI_KEY=tu_clave_aqui
+RAPIDAPI_HOST=tiktok-scraper7.p.rapidapi.com
+
+# OpenAI (Opcional)
+OPENAI_API_KEY=tu_clave_aqui
+
+# CORS
+BACKEND_CORS_ORIGINS=["http://localhost:3000"]
