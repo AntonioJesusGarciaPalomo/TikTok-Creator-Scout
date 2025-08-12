@@ -2,8 +2,8 @@ from pydantic_settings import BaseSettings
 from typing import Optional, List
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost/tiktok_scout"
+    # Database - Actualizado para psycopg3
+    DATABASE_URL: str = "postgresql+psycopg://user:password@localhost/tiktok_scout"
     
     # RapidAPI - CRÍTICO: Aquí debes poner tu API key
     RAPIDAPI_KEY: str  # OBLIGATORIO - Sin default

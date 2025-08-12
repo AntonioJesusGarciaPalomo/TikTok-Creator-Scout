@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models.creator import Creator
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+import settings
 import logging
 
 logger = logging.getLogger(__name__)
