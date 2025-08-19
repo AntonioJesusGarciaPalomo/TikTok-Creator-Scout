@@ -6,9 +6,9 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from ..models.creator import Creator
 from ..config import settings
-import semantic_kernel as sk
-from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-
+# Comentado temporalmente debido a incompatibilidad con pydantic
+# import semantic_kernel as sk
+# from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,18 +24,11 @@ class CreatorSegmentation:
             4: "Emerging Talent"         # Nuevos con potencial
         }
         
-        # Inicializar Semantic Kernel solo si hay API key
+        # Deshabilitado temporalmente
+        self.kernel = None
         if settings.OPENAI_API_KEY:
-            self.kernel = sk.Kernel()
-            self.kernel.add_text_completion_service(
-                "openai-chat",
-                OpenAIChatCompletion(
-                    "gpt-4",
-                    api_key=settings.OPENAI_API_KEY  # FIX: Usar variable de entorno
-                )
-            )
+            logger.warning("Semantic Kernel deshabilitado temporalmente debido a incompatibilidad con pydantic")
         else:
-            self.kernel = None
             logger.warning("OpenAI API key not configured, AI analysis will be disabled")
     
     def prepare_features(self, creators: List[Creator]) -> np.ndarray:
@@ -86,35 +79,9 @@ class CreatorSegmentation:
         avg_engagement = np.mean([c.engagement_rate for c in segment])
         avg_growth = np.mean([c.growth_rate for c in segment])
 
-        # Si no hay kernel configurado, devolver análisis básico
-        if not self.kernel:
-            return {
-                "segment_analysis": "AI analysis not available (OpenAI API key not configured)",
-                "metrics": {
-                    "avg_followers": avg_followers,
-                    "avg_engagement": avg_engagement,
-                    "avg_growth": avg_growth
-                }
-            }
-        
-        prompt = f"""
-        Analiza este segmento de creadores de TikTok:
-        - Número de creadores: {len(segment)}
-        - Promedio de seguidores: {avg_followers:.0f}
-        - Tasa de engagement promedio: {avg_engagement:.2f}%
-        - Crecimiento semanal promedio: {avg_growth:.2f}%
-        
-        Proporciona:
-        1. Características principales del segmento
-        2. Estrategias de crecimiento recomendadas
-        3. Oportunidades de monetización
-        """
-        
-        skill = self.kernel.skills.get_function("text", "complete")
-        result = await skill.invoke_async(prompt)
-        
+        # Por ahora siempre devolver análisis básico
         return {
-            "segment_analysis": result,
+            "segment_analysis": "AI analysis temporarily disabled (Semantic Kernel compatibility issue)",
             "metrics": {
                 "avg_followers": avg_followers,
                 "avg_engagement": avg_engagement,
