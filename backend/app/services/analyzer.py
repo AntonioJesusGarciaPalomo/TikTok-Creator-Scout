@@ -46,12 +46,17 @@ class CreatorAnalyzer:
     
     def calculate_potential_score(self, creator: Creator, growth_rates: Dict[str, float]) -> float:
         """Calcula un score de potencial basado en múltiples factores"""
+
+        avg_engagement_value = 0
+        if creator.followers_count > 0:
+            avg_engagement_value = min((creator.avg_likes_per_video + creator.avg_comments_per_video) / creator.followers_count * 100, 1)
+
         # Factores para el score
         factors = {
             "engagement_rate": creator.engagement_rate,
             "posting_frequency": min(creator.posting_frequency / 7, 1),  # Normalizado a 0-1
             "growth_rate": min(growth_rates["weekly"] / 10, 1),  # 10% semanal = 1.0
-            "avg_engagement": min((creator.avg_likes_per_video + creator.avg_comments_per_video) / creator.followers_count * 100, 1),
+            "avg_engagement": avg_engagement_value,
             "consistency": 1.0 if creator.posting_frequency >= 3 else creator.posting_frequency / 3
         }
         

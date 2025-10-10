@@ -1,3 +1,4 @@
+# backend/app/graphql/schema.py
 import strawberry
 from typing import List, Optional
 from datetime import datetime
@@ -8,6 +9,31 @@ from ..models.creator import Creator as CreatorModel
 from ..services.segmentation import CreatorSegmentation
 from ..services.analyzer import CreatorAnalyzer
 
+# Helper function to convert SQLAlchemy model to Strawberry type
+def creator_model_to_strawberry(creator_model: CreatorModel) -> "Creator":
+    return Creator(
+        id=creator_model.id,
+        username=creator_model.username,
+        display_name=creator_model.display_name,
+        avatar_url=creator_model.avatar_url,
+        bio=creator_model.bio,
+        verified=creator_model.verified,
+        followers_count=creator_model.followers_count,
+        following_count=creator_model.following_count,
+        likes_count=creator_model.likes_count,
+        videos_count=creator_model.videos_count,
+        engagement_rate=creator_model.engagement_rate,
+        avg_likes_per_video=creator_model.avg_likes_per_video,
+        avg_comments_per_video=creator_model.avg_comments_per_video,
+        growth_rate=creator_model.growth_rate,
+        posting_frequency=creator_model.posting_frequency,
+        segment=creator_model.segment,
+        potential_score=creator_model.potential_score,
+        created_at=creator_model.created_at,
+        updated_at=creator_model.updated_at,
+        last_scraped=creator_model.last_scraped
+    )
+
 @strawberry.type
 class Creator:
     id: int
@@ -16,13 +42,13 @@ class Creator:
     avatar_url: Optional[str]
     bio: Optional[str]
     verified: bool
-    
+
     # Métricas
     followers_count: int
     following_count: int
     likes_count: int
     videos_count: int
-    
+
     # Análisis
     engagement_rate: float
     avg_likes_per_video: float
@@ -31,7 +57,7 @@ class Creator:
     posting_frequency: float
     segment: Optional[str]
     potential_score: float
-    
+
     created_at: datetime
     updated_at: datetime
     last_scraped: Optional[datetime]
@@ -78,7 +104,7 @@ class Query:
     ) -> List[Creator]:
         db: Session = next(get_db())
         query = db.query(CreatorModel)
-        
+
         if filters:
             if filters.min_followers:
                 query = query.filter(CreatorModel.followers_count >= filters.min_followers)
@@ -92,32 +118,30 @@ class Query:
                 query = query.filter(CreatorModel.growth_rate >= filters.min_growth_rate)
             if filters.segments:
                 query = query.filter(CreatorModel.segment.in_(filters.segments))
-        
+
         creators = query.offset(offset).limit(limit).all()
-        return [Creator(**creator.__dict__) for creator in creators]
-    
+        return [creator_model_to_strawberry(creator) for creator in creators]
+
     @strawberry.field
     def creator(self, info: Info, username: str) -> Optional[Creator]:
         db: Session = next(get_db())
         creator = db.query(CreatorModel).filter(CreatorModel.username == username).first()
-        return Creator(**creator.__dict__) if creator else None
-    
+        return creator_model_to_strawberry(creator) if creator else None
+
     @strawberry.field
     async def segment_analysis(self, info: Info) -> List[SegmentAnalysis]:
         db: Session = next(get_db())
         segmentation = CreatorSegmentation()
-        
-        # Obtener todos los creadores
+
         creators = db.query(CreatorModel).all()
         segmented = segmentation.segment_creators(creators)
-        
+
         analyses = []
         for segment_id, segment_creators in segmented.items():
             segment_name = segmentation.segments.get(segment_id, f"Segment {segment_id}")
-            
-            # Análisis con IA
+
             ai_analysis = await segmentation.analyze_segment_with_ai(segment_creators)
-            
+
             analysis = SegmentAnalysis(
                 segment_name=segment_name,
                 creator_count=len(segment_creators),
@@ -127,7 +151,7 @@ class Query:
                 ai_insights=ai_analysis["segment_analysis"]
             )
             analyses.append(analysis)
-        
+
         return analyses
 
 @strawberry.type
@@ -135,44 +159,42 @@ class Mutation:
     @strawberry.mutation
     async def scrape_creator(self, info: Info, username: str) -> Creator:
         from ..services.tiktok_scraper import TikTokScraperService
-        
+
         db: Session = next(get_db())
         scraper = TikTokScraperService()
-        
+
         creator = await scraper.scrape_and_save_creator(username, db)
         if creator:
-            # Actualizar análisis
             analyzer = CreatorAnalyzer()
             analyzer.update_creator_analytics(creator, db)
-            
-            return Creator(**creator.__dict__)
+
+            return creator_model_to_strawberry(creator)
         else:
             raise Exception(f"Failed to scrape creator: {username}")
-    
+
     @strawberry.mutation
     async def batch_scrape(self, info: Info, usernames: List[str]) -> List[Creator]:
         from ..services.tiktok_scraper import TikTokScraperService
-        
+
         db: Session = next(get_db())
         scraper = TikTokScraperService()
-        
+
         creators = await scraper.batch_scrape_creators(usernames, db)
-        
-        # Actualizar análisis para todos
+
         analyzer = CreatorAnalyzer()
         for creator in creators:
             analyzer.update_creator_analytics(creator, db)
-        
-        return [Creator(**c.__dict__) for c in creators]
-    
+
+        return [creator_model_to_strawberry(c) for c in creators]
+
     @strawberry.mutation
     def update_segments(self, info: Info) -> bool:
         db: Session = next(get_db())
         segmentation = CreatorSegmentation()
-        
+
         creators = db.query(CreatorModel).all()
         segmentation.segment_creators(creators)
-        
+
         db.commit()
         return True
 

@@ -4,8 +4,8 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import asyncio
 from ..config import settings
-from ..models.creator import Creator, Video
-from ..models.metrics import CreatorMetrics
+from ..models.creator import Creator
+from ..models.metrics import CreatorMetrics, Video
 from sqlalchemy.orm import Session
 import logging
 
