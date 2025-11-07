@@ -48,16 +48,22 @@ class CreatorAnalyzer:
         """Calcula un score de potencial basado en múltiples factores"""
 
         avg_engagement_value = 0
-        if creator.followers_count > 0:
-            avg_engagement_value = min((creator.avg_likes_per_video + creator.avg_comments_per_video) / creator.followers_count * 100, 1)
+        if creator.followers_count and creator.followers_count > 0:
+            avg_likes = creator.avg_likes_per_video or 0
+            avg_comments = creator.avg_comments_per_video or 0
+            avg_engagement_value = min((avg_likes + avg_comments) / creator.followers_count * 100, 1)
 
-        # Factores para el score
+        # Factores para el score (con valores seguros por defecto)
+        posting_freq = creator.posting_frequency or 0
+        engagement_rate = creator.engagement_rate or 0
+        weekly_growth = growth_rates.get("weekly", 0)
+
         factors = {
-            "engagement_rate": creator.engagement_rate,
-            "posting_frequency": min(creator.posting_frequency / 7, 1),  # Normalizado a 0-1
-            "growth_rate": min(growth_rates["weekly"] / 10, 1),  # 10% semanal = 1.0
+            "engagement_rate": engagement_rate,
+            "posting_frequency": min(posting_freq / 7, 1),  # Normalizado a 0-1
+            "growth_rate": min(weekly_growth / 10, 1) if weekly_growth > 0 else 0,  # 10% semanal = 1.0
             "avg_engagement": avg_engagement_value,
-            "consistency": 1.0 if creator.posting_frequency >= 3 else creator.posting_frequency / 3
+            "consistency": 1.0 if posting_freq >= 3 else posting_freq / 3
         }
         
         # Pesos para cada factor

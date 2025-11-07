@@ -169,7 +169,7 @@ const Dashboard = () => {
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Crecimiento Promedio</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {(creators.reduce((acc, c) => acc + c.growth_rate, 0) / creators.length).toFixed(1)}%
+                                    {creators.length > 0 ? (creators.reduce((acc, c) => acc + c.growth_rate, 0) / creators.length).toFixed(1) : '0.0'}%
                                 </p>
                             </div>
                         </div>
@@ -181,7 +181,7 @@ const Dashboard = () => {
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Engagement Promedio</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {(creators.reduce((acc, c) => acc + c.engagement_rate, 0) / creators.length).toFixed(2)}%
+                                    {creators.length > 0 ? (creators.reduce((acc, c) => acc + c.engagement_rate, 0) / creators.length).toFixed(2) : '0.00'}%
                                 </p>
                             </div>
                         </div>
@@ -193,7 +193,7 @@ const Dashboard = () => {
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Frecuencia Promedio</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {(creators.reduce((acc, c) => acc + c.posting_frequency, 0) / creators.length).toFixed(1)} /sem
+                                    {creators.length > 0 ? (creators.reduce((acc, c) => acc + c.posting_frequency, 0) / creators.length).toFixed(1) : '0.0'} /sem
                                 </p>
                             </div>
                         </div>
