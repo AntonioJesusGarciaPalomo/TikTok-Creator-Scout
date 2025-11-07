@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://user:password@localhost/tiktok_scout"
 
     # RapidAPI - CRÍTICO: Aquí debes poner tu API key
-    RAPIDAPI_KEY: str  # OBLIGATORIO - Sin default
+    RAPIDAPI_KEY: Optional[str] = None  # Opcional con validación en runtime
     RAPIDAPI_HOST: str = "tiktok-scraper7.p.rapidapi.com"
 
     # OpenAI para generación de mensajes personalizados

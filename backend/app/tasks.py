@@ -1,5 +1,6 @@
 # backend/app/tasks.py
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from .celery_app import celery_app
 from .database import SessionLocal
 from .services.tiktok_scraper import TikTokScraperService
@@ -17,7 +18,13 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 class DatabaseTask(Task):
-    """Clase base para tareas que usan la base de datos"""
+    """Clase base para tareas que usan la base de datos
+
+    Maneja automáticamente:
+    - Creación y cierre de sesiones de DB
+    - Limpieza en caso de timeouts
+    - Manejo de excepciones
+    """
     _db = None
 
     @property
@@ -27,9 +34,22 @@ class DatabaseTask(Task):
         return self._db
 
     def after_return(self, *args, **kwargs):
+        """Se ejecuta después de que la tarea termina normalmente"""
         if self._db is not None:
             self._db.close()
             self._db = None
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        """Se ejecuta cuando la tarea falla"""
+        logger.error(f"Task {task_id} failed: {exc}")
+        if self._db is not None:
+            try:
+                self._db.rollback()  # Rollback de transacciones pendientes
+            except Exception as e:
+                logger.error(f"Error during rollback: {e}")
+            finally:
+                self._db.close()
+                self._db = None
 
 # ========== SCRAPING TASKS ==========
 
@@ -46,16 +66,19 @@ def scrape_creator_task(self, username: str):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    creator = loop.run_until_complete(
-        scraper.scrape_and_save_creator(username, self.db)
-    )
+    try:
+        creator = loop.run_until_complete(
+            scraper.scrape_and_save_creator(username, self.db)
+        )
 
-    if creator:
-        logger.info(f"Successfully scraped creator: {username}")
-        return {"success": True, "creator_id": creator.id, "username": username}
-    else:
-        logger.error(f"Failed to scrape creator: {username}")
-        return {"success": False, "username": username}
+        if creator:
+            logger.info(f"Successfully scraped creator: {username}")
+            return {"success": True, "creator_id": creator.id, "username": username}
+        else:
+            logger.error(f"Failed to scrape creator: {username}")
+            return {"success": False, "username": username}
+    finally:
+        loop.close()
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def batch_scrape_creators_task(self, usernames: list):
@@ -70,16 +93,19 @@ def batch_scrape_creators_task(self, usernames: list):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    creators = loop.run_until_complete(
-        scraper.batch_scrape_creators(usernames, self.db)
-    )
+    try:
+        creators = loop.run_until_complete(
+            scraper.batch_scrape_creators(usernames, self.db)
+        )
 
-    logger.info(f"Batch scrape complete: {len(creators)} creators scraped")
-    return {
-        "success": True,
-        "total": len(usernames),
-        "scraped": len(creators)
-    }
+        logger.info(f"Batch scrape complete: {len(creators)} creators scraped")
+        return {
+            "success": True,
+            "total": len(usernames),
+            "scraped": len(creators)
+        }
+    finally:
+        loop.close()
 
 # ========== SEARCH TASKS ==========
 
@@ -97,29 +123,32 @@ def search_and_scrape_task(self, search_type: str, query: str, filters: dict = N
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    # Buscar creadores
-    creators = loop.run_until_complete(
-        search_service.discover_creators(search_type, query, filters, self.db)
-    )
-
-    logger.info(f"Found {len(creators)} creators")
-
-    # Scrapear automáticamente
-    usernames = [c["username"] for c in creators if c.get("username")][:50]
-
-    if usernames:
-        scraped_creators = loop.run_until_complete(
-            scraper.batch_scrape_creators(usernames, self.db)
+    try:
+        # Buscar creadores
+        creators = loop.run_until_complete(
+            search_service.discover_creators(search_type, query, filters, self.db)
         )
-        logger.info(f"Auto-scraped {len(scraped_creators)} creators")
 
-        return {
-            "success": True,
-            "found": len(creators),
-            "scraped": len(scraped_creators)
-        }
+        logger.info(f"Found {len(creators)} creators")
 
-    return {"success": True, "found": len(creators), "scraped": 0}
+        # Scrapear automáticamente
+        usernames = [c["username"] for c in creators if c.get("username")][:50]
+
+        if usernames:
+            scraped_creators = loop.run_until_complete(
+                scraper.batch_scrape_creators(usernames, self.db)
+            )
+            logger.info(f"Auto-scraped {len(scraped_creators)} creators")
+
+            return {
+                "success": True,
+                "found": len(creators),
+                "scraped": len(scraped_creators)
+            }
+
+        return {"success": True, "found": len(creators), "scraped": 0}
+    finally:
+        loop.close()
 
 # ========== MESSAGE TASKS ==========
 
@@ -141,23 +170,27 @@ def generate_message_task(self, creator_id: int, campaign_id: int = None, use_ai
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    message_text = loop.run_until_complete(
-        generator.generate_personalized_message(creator, use_ai=use_ai, db=self.db)
-    )
+    try:
+        message_text = loop.run_until_complete(
+            generator.generate_personalized_message(creator, use_ai=use_ai, db=self.db)
+        )
 
-    # Crear registro de mensaje
-    message = Message(
-        creator_id=creator_id,
-        campaign_id=campaign_id,
-        content=message_text,
-        status=MessageStatus.DRAFT
-    )
-    self.db.add(message)
-    self.db.commit()
+        # Crear registro de mensaje
+        message = Message(
+            creator_id=creator_id,
+            campaign_id=campaign_id,
+            content=message_text,
+            status=MessageStatus.DRAFT
+        )
+        self.db.add(message)
+        self.db.commit()
+        self.db.refresh(message)  # Refresh para acceder a atributos después del commit
 
-    logger.info(f"Message generated for creator {creator_id}, message_id: {message.id}")
+        logger.info(f"Message generated for creator {creator_id}, message_id: {message.id}")
 
-    return {"success": True, "message_id": message.id, "creator_id": creator_id}
+        return {"success": True, "message_id": message.id, "creator_id": creator_id}
+    finally:
+        loop.close()
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def bulk_generate_messages_task(
@@ -178,23 +211,26 @@ def bulk_generate_messages_task(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    creator_messages = loop.run_until_complete(
-        generator.bulk_generate_messages(creators, use_ai, db=self.db)
-    )
+    try:
+        creator_messages = loop.run_until_complete(
+            generator.bulk_generate_messages(creators, use_ai, db=self.db)
+        )
 
-    messages = generator.create_message_records(
-        creator_messages,
-        campaign_id,
-        self.db
-    )
+        messages = generator.create_message_records(
+            creator_messages,
+            campaign_id,
+            self.db
+        )
 
-    logger.info(f"Generated {len(messages)} messages")
+        logger.info(f"Generated {len(messages)} messages")
 
-    return {
-        "success": True,
-        "total": len(creator_ids),
-        "generated": len(messages)
-    }
+        return {
+            "success": True,
+            "total": len(creator_ids),
+            "generated": len(messages)
+        }
+    finally:
+        loop.close()
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def send_message_task(self, message_id: int):
@@ -209,11 +245,14 @@ def send_message_task(self, message_id: int):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    success = loop.run_until_complete(
-        sender.send_message(message_id, self.db)
-    )
+    try:
+        success = loop.run_until_complete(
+            sender.send_message(message_id, self.db)
+        )
 
-    return {"success": success, "message_id": message_id}
+        return {"success": success, "message_id": message_id}
+    finally:
+        loop.close()
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def send_batch_messages_task(self, message_ids: list, delay: float = 5.0):
@@ -228,13 +267,16 @@ def send_batch_messages_task(self, message_ids: list, delay: float = 5.0):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    results = loop.run_until_complete(
-        sender.send_batch_messages(message_ids, self.db, delay)
-    )
+    try:
+        results = loop.run_until_complete(
+            sender.send_batch_messages(message_ids, self.db, delay)
+        )
 
-    logger.info(f"Batch send complete: {len(results['success'])} sent, {len(results['failed'])} failed")
+        logger.info(f"Batch send complete: {len(results['success'])} sent, {len(results['failed'])} failed")
 
-    return results
+        return results
+    finally:
+        loop.close()
 
 @celery_app.task(base=DatabaseTask, bind=True)
 def process_queued_messages(self):
@@ -256,19 +298,22 @@ def process_queued_messages(self):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    results = loop.run_until_complete(
-        sender.send_batch_messages(message_ids, self.db, delay_between_messages=10.0)
-    )
+    try:
+        results = loop.run_until_complete(
+            sender.send_batch_messages(message_ids, self.db, delay_between_messages=10.0)
+        )
 
-    logger.info(f"Processed {len(message_ids)} queued messages")
+        logger.info(f"Processed {len(message_ids)} queued messages")
 
-    return {
-        "success": True,
-        "processed": len(message_ids),
-        "sent": len(results['success']),
-        "failed": len(results['failed']),
-        "skipped": len(results['skipped'])
-    }
+        return {
+            "success": True,
+            "processed": len(message_ids),
+            "sent": len(results['success']),
+            "failed": len(results['failed']),
+            "skipped": len(results['skipped'])
+        }
+    finally:
+        loop.close()
 
 # ========== ANALYTICS TASKS ==========
 
@@ -360,30 +405,33 @@ def execute_campaign_task(self, campaign_id: int):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    creator_messages = loop.run_until_complete(
-        generator.bulk_generate_messages(filtered_creators, use_ai=True, db=self.db)
-    )
+    try:
+        creator_messages = loop.run_until_complete(
+            generator.bulk_generate_messages(filtered_creators, use_ai=True, db=self.db)
+        )
 
-    messages = generator.create_message_records(
-        creator_messages,
-        campaign_id,
-        self.db
-    )
+        messages = generator.create_message_records(
+            creator_messages,
+            campaign_id,
+            self.db
+        )
 
-    logger.info(f"Generated {len(messages)} messages for campaign")
+        logger.info(f"Generated {len(messages)} messages for campaign")
 
-    # 3. Encolar mensajes si auto_send está activado
-    if campaign.auto_send:
-        sender = TikTokMessageSender()
-        queued = sender.queue_messages_for_campaign(campaign_id, self.db)
-        logger.info(f"Queued {queued} messages for auto-send")
+        # 3. Encolar mensajes si auto_send está activado
+        if campaign.auto_send:
+            sender = TikTokMessageSender()
+            queued = sender.queue_messages_for_campaign(campaign_id, self.db)
+            logger.info(f"Queued {queued} messages for auto-send")
 
-    campaign.total_targets = len(filtered_creators)
-    self.db.commit()
+        campaign.total_targets = len(filtered_creators)
+        self.db.commit()
 
-    return {
-        "success": True,
-        "campaign_id": campaign_id,
-        "targets": len(filtered_creators),
-        "messages_generated": len(messages)
-    }
+        return {
+            "success": True,
+            "campaign_id": campaign_id,
+            "targets": len(filtered_creators),
+            "messages_generated": len(messages)
+        }
+    finally:
+        loop.close()

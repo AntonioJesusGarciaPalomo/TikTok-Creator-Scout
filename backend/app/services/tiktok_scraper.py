@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 
 class TikTokScraperService:
     def __init__(self):
+        if not settings.RAPIDAPI_KEY:
+            raise ValueError(
+                "RAPIDAPI_KEY is not configured. Please set it in your .env file. "
+                "Get your API key from https://rapidapi.com/DataMM/api/tiktok-scraper7"
+            )
         self.base_url = f"https://{settings.RAPIDAPI_HOST}"
         self.headers = {
             "X-RapidAPI-Key": settings.RAPIDAPI_KEY,
@@ -148,7 +153,10 @@ class TikTokScraperService:
         creator.avg_comments_per_video = avg_comments
         creator.posting_frequency = posting_frequency
         creator.last_scraped = datetime.utcnow()
-        
+
+        # Flush para obtener el ID del creador antes de guardar videos
+        db.flush()
+
         # Guardar videos
         for video_data in videos[:10]:  # Guardar últimos 10 videos
             video_id = video_data.get("id")
@@ -182,20 +190,34 @@ class TikTokScraperService:
         
         return creator
     
-    async def batch_scrape_creators(self, usernames: List[str], db: Session):
-        """Scrapea múltiples creadores de forma concurrente"""
+    async def batch_scrape_creators(self, usernames: List[str], db: Session = None):
+        """Scrapea múltiples creadores de forma concurrente
+
+        IMPORTANTE: Para operaciones batch, cada username crea su propia sesión de DB
+        para evitar problemas de concurrencia. El parámetro db se ignora en batch.
+        """
+        from ..database import SessionLocal
+
+        async def scrape_with_own_session(username: str):
+            """Wrapper que crea su propia sesión para cada creador"""
+            session = SessionLocal()
+            try:
+                return await self.scrape_and_save_creator(username, session)
+            finally:
+                session.close()
+
         tasks = []
         for username in usernames:
-            task = self.scrape_and_save_creator(username, db)
+            task = scrape_with_own_session(username)
             tasks.append(task)
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         successful = [r for r in results if isinstance(r, Creator)]
         failed = [usernames[i] for i, r in enumerate(results) if not isinstance(r, Creator)]
-        
+
         logger.info(f"Scraped {len(successful)} creators successfully")
         if failed:
             logger.warning(f"Failed to scrape: {failed}")
-        
+
         return successful

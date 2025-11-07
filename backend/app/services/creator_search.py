@@ -230,21 +230,34 @@ class CreatorSearchService:
         """
         Ejecuta múltiples búsquedas en paralelo
 
+        IMPORTANTE: Para operaciones paralelas, cada búsqueda crea su propia sesión de DB
+        para evitar problemas de concurrencia. El parámetro db se ignora en bulk.
+
         Args:
             searches: Lista de búsquedas [{"type": "hashtag", "query": "fitness", "filters": {...}}, ...]
-            db: Sesión de base de datos
+            db: Sesión de base de datos (ignorado en bulk operations)
 
         Returns:
             Diccionario con resultados por búsqueda
         """
+        from ..database import SessionLocal
+
+        async def discover_with_own_session(search: Dict):
+            """Wrapper que crea su propia sesión para cada búsqueda"""
+            session = SessionLocal()
+            try:
+                return await self.discover_creators(
+                    search_type=search.get("type"),
+                    query=search.get("query"),
+                    filters=search.get("filters"),
+                    db=session
+                )
+            finally:
+                session.close()
+
         tasks = []
         for search in searches:
-            task = self.discover_creators(
-                search_type=search.get("type"),
-                query=search.get("query"),
-                filters=search.get("filters"),
-                db=db
-            )
+            task = discover_with_own_session(search)
             tasks.append(task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
