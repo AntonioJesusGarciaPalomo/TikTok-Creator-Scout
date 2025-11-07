@@ -1,15 +1,33 @@
 # Base de datos
-DATABASE_URL=postgresql://user:password@localhost/tiktok_scout
+DATABASE_URL=postgresql+psycopg://user:password@localhost/tiktok_scout
 
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# RapidAPI (OBLIGATORIO)
+# RapidAPI para TikTok Scraping (OBLIGATORIO)
 RAPIDAPI_KEY=tu_clave_aqui
 RAPIDAPI_HOST=tiktok-scraper7.p.rapidapi.com
 
-# OpenAI (Opcional)
+# OpenAI para mensajes personalizados con IA (OBLIGATORIO para mensajería)
 OPENAI_API_KEY=tu_clave_aqui
+OPENAI_MODEL=gpt-4-turbo-preview
+
+# TikTok API para envío de mensajes (Opcional - requiere credenciales de TikTok Business)
+TIKTOK_ACCESS_TOKEN=tu_token_aqui
+TIKTOK_CLIENT_KEY=tu_client_key_aqui
+TIKTOK_CLIENT_SECRET=tu_client_secret_aqui
+
+# Configuración de Rate Limiting para mensajes
+MAX_MESSAGES_PER_HOUR=50
+MAX_MESSAGES_PER_DAY=200
+
+# Configuración de búsqueda de creadores
+SEARCH_RESULTS_LIMIT=100
+AUTO_SCRAPE_NEW_CREATORS=True
 
 # CORS
 BACKEND_CORS_ORIGINS=["http://localhost:3000"]
+
+# Celery (para tareas asíncronas)
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
